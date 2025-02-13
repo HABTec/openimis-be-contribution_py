@@ -1,6 +1,9 @@
+import pprint
 from contribution.services import premium_updated
+from contribution.utils import getCheckoutSession
 from policy.models import Policy
 from typing import Optional
+from core.models import filter_validity
 
 import graphene
 from contribution.apps import ContributionConfig
@@ -84,6 +87,8 @@ class CreatePremiumMutation(OpenIMISMutation):
     _mutation_module = "contribution"
     _mutation_class = "CreatePremiumMutation"
 
+    payment_link = graphene.String()
+
     class Input(PremiumBase, OpenIMISMutation.Input):
         pass
 
@@ -95,6 +100,10 @@ class CreatePremiumMutation(OpenIMISMutation):
                     _("mutation.authentication_required"))
             if not user.has_perms(ContributionConfig.gql_mutation_create_premiums_perms):
                 raise PermissionDenied(_("unauthorized"))
+            if data["pending_amount"] <= 0.0:
+                raise ValidationError(
+                    _("mutation.contribution_amount_required"))
+            
             client_mutation_id = data.get("client_mutation_id")
             premium = premium_action(data, user)
             PremiumMutation.object_mutated(user, client_mutation_id=client_mutation_id, premium=premium)
@@ -104,6 +113,31 @@ class CreatePremiumMutation(OpenIMISMutation):
                 'message': _("contribution.mutation.failed_to_create_premium"),
                 'detail': str(exc)}
             ]
+        
+    @classmethod
+    def mutate_and_get_payload(cls, root, info, **data):
+        data["pending_amount"] = data.pop("amount") 
+        data["amount"] = 0.0
+
+        policyId = data["policy_uuid"]
+        policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
+
+        response = super().mutate_and_get_payload(root, info, **data)
+        premium = Premium.objects.select_related("policy__product").filter(*filter_validity(), policy=policy).first()
+
+        if(premium is not None):
+            session = getCheckoutSession( 
+                premium.policy.product.name, 
+                premium.policy.product.code,
+                premium.uuid, 
+                premium.pending_amount)['data']
+    
+            
+            response.payment_link = session['paymentUrl']
+            premium.receipt = session['sessionId'] if (session['sessionId'])  else premium.receipt
+            premium.save()
+
+        return response
 
 
 class UpdatePremiumMutation(OpenIMISMutation):

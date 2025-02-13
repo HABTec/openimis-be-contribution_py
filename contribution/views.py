@@ -1,1 +1,45 @@
 # Create your views here.
+import os
+import pprint
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
+from contribution.gql_mutations import set_premium_deleted
+from contribution.models import Premium
+from django.shortcuts import redirect
+
+from contribution.services import premium_updated
+
+payment_success_frontend_url = os.environ.get("PAYMENT_SUCCESS_FRONTEND_URL")
+payment_failure_frontend_url = os.environ.get("PAYMENT_FAILURE_FRONTEND_URL")
+
+@api_view(['GET'])
+def checkout_success(request):
+    premium_id = request.query_params.get('premiumId', None)
+
+        # Cancel the payment
+    premium = Premium.objects.filter(uuid=premium_id).first()
+    if(premium):
+        premium.amount = premium.pending_amount
+        premium.pending_amount = 0.0
+        premium.save()
+
+        premium_updated(premium)
+
+    return redirect(payment_success_frontend_url)
+
+@api_view(['GET'])
+def checkout_error(request):
+    return redirect(payment_failure_frontend_url)
+
+@api_view(['GET'])
+def checkout_cancel(request):
+    # premium_id = request.query_params.get('premiumId', None)
+    # if(premium_id):
+    #     # Cancel the payment
+    #     premium = Premium.objects.filter(id=premium_id).first()
+    #     if(premium):
+    #         set_premium_deleted(premium)
+    #     pass
+
+    return redirect(payment_failure_frontend_url)

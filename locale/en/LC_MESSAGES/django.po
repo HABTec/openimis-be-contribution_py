@@ -29,6 +29,9 @@ msgstr "The policy UUID was not found"
 msgid "mutation.authentication_required"
 msgstr "User needs to be authenticated for this operation"
 
+msgid "mutation.contribution_amount_required"
+msgstr "Contribution amount cannot be zero"
+
 #: contribution/gql_mutations.py:110 contribution/gql_mutations.py:139
 #: contribution/gql_mutations.py:163 contribution/schema.py:32
 #: contribution/schema.py:54

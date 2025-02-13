@@ -35,6 +35,8 @@ class Premium(core_models.VersionedModel):
     )
     amount = models.DecimalField(
         db_column="Amount", max_digits=18, decimal_places=2)
+    pending_amount = models.DecimalField(
+        db_column="PendingAmount", max_digits=18, decimal_places=2, default=0.0)
     receipt = models.CharField(db_column="Receipt", max_length=50)
     pay_date = fields.DateField(db_column="PayDate")
     pay_type = models.CharField(
