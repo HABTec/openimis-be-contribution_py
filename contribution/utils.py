@@ -34,7 +34,7 @@ def getCheckoutSession(product_code: str, product_name: str, premiumId: str, amo
             {
                 "name": product_code,
                 "quantity": 1,
-                "price": 1,
+                "price": amount,
                 "description": product_name,
             },
         ],
@@ -42,7 +42,7 @@ def getCheckoutSession(product_code: str, product_name: str, premiumId: str, amo
             {
                 "accountNumber": "01320811436100",
                 "bank": "AWINETAA",
-                "amount": 1
+                "amount": amount
             }
         ],
         "lang": "EN",
