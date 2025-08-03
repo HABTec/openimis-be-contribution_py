@@ -106,6 +106,7 @@ class CreatePremiumMutation(OpenIMISMutation):
                     _("mutation.authentication_required"))
             if not user.has_perms(ContributionConfig.gql_mutation_create_premiums_perms):
                 raise PermissionDenied(_("unauthorized"))
+            data["amount"] = 0.0
             if data['pay_type'] == 'F' and data['pay_date'] is None:
                 raise Exception(_("pay_date_required_for_offline_premium"))
             if data['pay_type'] == 'F' and data['receipt'] is None:
@@ -114,9 +115,9 @@ class CreatePremiumMutation(OpenIMISMutation):
                 data['pay_date'] = datetime.datetime.now()
                 data['receipt'] = ''.join(random.choices(string.ascii_letters + string.digits, k=50))
 
-            if data["pending_amount"] <= 0.0:
-                raise ValidationError(
-                    _("mutation.contribution_amount_required"))
+            # if data["pending_amount"] <= 0.0:
+            #     raise ValidationError(
+            #         _("mutation.contribution_amount_required"))
             
             client_mutation_id = data.get("client_mutation_id")
             premium = premium_action(data, user)
@@ -131,24 +132,24 @@ class CreatePremiumMutation(OpenIMISMutation):
     @classmethod
     def mutate_and_get_payload(cls, root, info, **data):
             data["pending_amount"] = data.pop("amount") 
-            data["amount"] = 0.0
             if data['pay_type'] == 'F':
                 data['amount'] = data["pending_amount"]
             policyId = data["policy_uuid"]
             policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
             response = super().mutate_and_get_payload(root, info, **data)
             premium = Premium.objects.select_related("policy__product").filter(*filter_validity(), policy=policy).first()
-            if data['pay_type'] == 'O':
-                family = Family.objects.get(Q(uuid=policy.family.uuid))
-                filter = { 'family_uuid': family.uuid , 'is_active': True, 'disability_status': 'no_disability' }
-                familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
-                for member in familymembers:
-                    age = (datetime.date.today() - member.dob).days // 365
-                    if age < 18 or not member.disability_status != 'no_disability' or member.is_active == False:
-                        familymembers.pop(familymembers.index(member))
+            family = Family.objects.get(Q(uuid=policy.family.uuid))
+            filter = { 'family_uuid': family.uuid , 'is_active': True, 'disability_status': 'no_disability' }
+            familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
+            for member in familymembers:
+                age = (datetime.date.today() - member.dob).days // 365
+                if age < 18 or not member.disability_status != 'no_disability' or member.is_active == False:
+                    familymembers.pop(familymembers.index(member))
 
-                finalAmount = policy.product.lump_sum +  len(familymembers) * policy.product.premium_adult
-                print(finalAmount)
+            data["pending_amount"] = policy.product.lump_sum +  len(familymembers) * policy.product.premium_adult
+            data["amount"] = data["pending_amount"]
+
+            if data['pay_type'] == 'O':
                 if(premium is not None):
                     session = getCheckoutSession( 
                         premium.policy.product.name, 
