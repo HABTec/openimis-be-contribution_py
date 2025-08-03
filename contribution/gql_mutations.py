@@ -9,6 +9,8 @@ import graphene
 from contribution.apps import ContributionConfig
 from contribution.models import Premium, PremiumMutation
 from payer.models import Payer
+from insuree.models import Insuree
+from insuree.models import Family
 from policy import models as policy_models
 from core.schema import OpenIMISMutation
 from django.contrib.auth.models import AnonymousUser
@@ -18,6 +20,9 @@ from core import datetime
 from policy.services import PolicyService
 from .services import update_or_create_premium 
 import logging
+import random
+import string
+from django.db.models import Q
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +65,7 @@ def premium_action(data, user):
     now = datetime.datetime.now()
     data['audit_user_id'] = user.id_for_audit
     data['validity_from'] = now
+    
     policy_uuid = data.pop("policy_uuid") if "policy_uuid" in data else None
     if not policy_uuid:
         raise Exception(_("policy_uuid_required"))
@@ -100,9 +106,18 @@ class CreatePremiumMutation(OpenIMISMutation):
                     _("mutation.authentication_required"))
             if not user.has_perms(ContributionConfig.gql_mutation_create_premiums_perms):
                 raise PermissionDenied(_("unauthorized"))
-            if data["pending_amount"] <= 0.0:
-                raise ValidationError(
-                    _("mutation.contribution_amount_required"))
+            data["amount"] = 0.0
+            if data['pay_type'] == 'F' and data['pay_date'] is None:
+                raise Exception(_("pay_date_required_for_offline_premium"))
+            if data['pay_type'] == 'F' and data['receipt'] is None:
+                raise Exception(_("receit_is_required_for_offline_premium"))
+            if data['pay_type'] == 'O':
+                data['pay_date'] = datetime.datetime.now()
+                data['receipt'] = ''.join(random.choices(string.ascii_letters + string.digits, k=50))
+
+            # if data["pending_amount"] <= 0.0:
+            #     raise ValidationError(
+            #         _("mutation.contribution_amount_required"))
             
             client_mutation_id = data.get("client_mutation_id")
             premium = premium_action(data, user)
@@ -116,28 +131,38 @@ class CreatePremiumMutation(OpenIMISMutation):
         
     @classmethod
     def mutate_and_get_payload(cls, root, info, **data):
-        data["pending_amount"] = data.pop("amount") 
-        data["amount"] = 0.0
+            data["pending_amount"] = data.pop("amount") 
+            if data['pay_type'] == 'F':
+                data['amount'] = data["pending_amount"]
+            policyId = data["policy_uuid"]
+            policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
+            response = super().mutate_and_get_payload(root, info, **data)
+            premium = Premium.objects.select_related("policy__product").filter(*filter_validity(), policy=policy).first()
+            family = Family.objects.get(Q(uuid=policy.family.uuid))
+            filter = { 'family_uuid': family.uuid , 'is_active': True, 'disability_status': 'no_disability' }
+            familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
+            for member in familymembers:
+                age = (datetime.date.today() - member.dob).days // 365
+                if age < 18 or not member.disability_status != 'no_disability' or member.is_active == False:
+                    familymembers.pop(familymembers.index(member))
 
-        policyId = data["policy_uuid"]
-        policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
+            data["pending_amount"] = policy.product.lump_sum +  len(familymembers) * policy.product.premium_adult
+            data["amount"] = data["pending_amount"]
 
-        response = super().mutate_and_get_payload(root, info, **data)
-        premium = Premium.objects.select_related("policy__product").filter(*filter_validity(), policy=policy).first()
-
-        if(premium is not None):
-            session = getCheckoutSession( 
-                premium.policy.product.name, 
-                premium.policy.product.code,
-                premium.uuid, 
-                premium.pending_amount)['data']
-    
+            if data['pay_type'] == 'O':
+                if(premium is not None):
+                    session = getCheckoutSession( 
+                        premium.policy.product.name, 
+                        premium.policy.product.code,
+                        premium.uuid, 
+                        finalAmount)['data']
             
-            response.payment_link = session['paymentUrl']
-            premium.receipt = session['sessionId'] if (session['sessionId'])  else premium.receipt
-            premium.save()
-
-        return response
+                    
+                response.payment_link = session['paymentUrl']
+                premium.receipt = session['sessionId'] if (session['sessionId'])  else premium.receipt
+                premium.save()
+            return response
+            
 
 
 class UpdatePremiumMutation(OpenIMISMutation):
