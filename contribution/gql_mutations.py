@@ -115,10 +115,6 @@ class CreatePremiumMutation(OpenIMISMutation):
                 data['pay_date'] = datetime.datetime.now()
                 data['receipt'] = ''.join(random.choices(string.ascii_letters + string.digits, k=50))
 
-            # if data["pending_amount"] <= 0.0:
-            #     raise ValidationError(
-            #         _("mutation.contribution_amount_required"))
-            
             client_mutation_id = data.get("client_mutation_id")
             premium = premium_action(data, user)
             PremiumMutation.object_mutated(user, client_mutation_id=client_mutation_id, premium=premium)
@@ -132,8 +128,6 @@ class CreatePremiumMutation(OpenIMISMutation):
     @classmethod
     def mutate_and_get_payload(cls, root, info, **data):
             data["pending_amount"] = data.pop("amount") 
-            if data['pay_type'] == 'F':
-                data['amount'] = data["pending_amount"]
             policyId = data["policy_uuid"]
             policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
             response = super().mutate_and_get_payload(root, info, **data)
@@ -146,7 +140,8 @@ class CreatePremiumMutation(OpenIMISMutation):
                 if age < 18 or not member.disability_status != 'no_disability' or member.is_active == False:
                     familymembers.pop(familymembers.index(member))
 
-            data["pending_amount"] = policy.product.lump_sum +  len(familymembers) * policy.product.premium_adult
+            finalAmount = policy.product.lump_sum +  len(familymembers) * policy.product.premium_adult
+            data["pending_amount"] = finalAmount
             data["amount"] = data["pending_amount"]
 
             if data['pay_type'] == 'O':
