@@ -140,7 +140,7 @@ class CreatePremiumMutation(OpenIMISMutation):
                 if age < 18 or not member.disability_status != 'no_disability' or member.is_active == False:
                     familymembers.pop(familymembers.index(member))
 
-            finalAmount = policy.product.lump_sum +  len(familymembers) * policy.product.premium_adult
+            finalAmount = (policy.product.lump_sum or 0) + len(familymembers) * (policy.product.premium_adult or 0)
             data["pending_amount"] = finalAmount
             data["amount"] = data["pending_amount"]
 
