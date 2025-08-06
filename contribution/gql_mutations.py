@@ -146,7 +146,7 @@ class CreatePremiumMutation(OpenIMISMutation):
                     premium = float(policy.product.premium_adult) if policy.product.premium_adult else 0.0
                 except (ValueError, OverflowError, TypeError) as e:
                     lump_sum = 0.0 
-                    lump_sum  = 0.0
+                    premium = 0.0
                     raise e
 
                 finalAmount = lump_sum + len(familymembers) * premium
