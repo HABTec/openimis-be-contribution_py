@@ -147,7 +147,7 @@ class CreatePremiumMutation(OpenIMISMutation):
                 except (ValueError, OverflowError, TypeError) as e:
                     lump_sum = 0.0 
                     premium = 0.0
-                    raise e
+                    # Exception handled, continue with default values
 
                 finalAmount = lump_sum + len(familymembers) * premium
             data["pending_amount"] = finalAmount
