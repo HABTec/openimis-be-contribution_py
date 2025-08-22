@@ -106,7 +106,6 @@ class CreatePremiumMutation(OpenIMISMutation):
                     _("mutation.authentication_required"))
             if not user.has_perms(ContributionConfig.gql_mutation_create_premiums_perms):
                 raise PermissionDenied(_("unauthorized"))
-            data["amount"] = 0.0
             if data['pay_type'] == 'F' and data['pay_date'] is None:
                 raise Exception(_("pay_date_required_for_offline_premium"))
             if data['pay_type'] == 'F' and data['receipt'] is None:
@@ -127,32 +126,33 @@ class CreatePremiumMutation(OpenIMISMutation):
         
     @classmethod
     def mutate_and_get_payload(cls, root, info, **data):
-            data["pending_amount"] = data.pop("amount") 
             policyId = data["policy_uuid"]
             policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
-            response = super().mutate_and_get_payload(root, info, **data)
-            premium = Premium.objects.select_related("policy__product").filter(*filter_validity(), policy=policy).first()
+            premium = Premium.objects.select_related("policy__product").filter( policy=policy).first()
             family = Family.objects.get(Q(uuid=policy.family.uuid))
             filter = { 'family_uuid': family.uuid , 'is_active': True, 'disability_status': 'no_disability' }
             familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
             for member in familymembers:
                 age = (datetime.date.today() - member.dob).days // 365
-                if age < 18 or not member.disability_status != 'no_disability' or member.is_active == False:
+                if age < 18 or member.disability_status != 'no_disability' or member.is_active == False:
                     familymembers.pop(familymembers.index(member))
+                if member.is_head_of_family():
+                    familymembers.pop(familymembers.index(member))
+                if member.relationship == 8:
+                    familymembers.pop(familymembers.index(member))
+            try:
+                lump_sum = float(policy.membership_type.price) if policy.membership_type.price else 0.0
+                premium_amount = lump_sum * float(policy.product.premium_adult) /100 if policy.product.premium_adult else 0.0
+            except (ValueError, OverflowError, TypeError) as e:
+                lump_sum = 0.0 
+                premium_amount = 0.0
+                # Exception handled, continue with default values
 
-
-                try:
-                    lump_sum = float(policy.product.lump_sum) if policy.product.lump_sum else 0.0
-                    premium = float(policy.product.premium_adult) if policy.product.premium_adult else 0.0
-                except (ValueError, OverflowError, TypeError) as e:
-                    lump_sum = 0.0 
-                    premium = 0.0
-                    # Exception handled, continue with default values
-
-                finalAmount = lump_sum + len(familymembers) * premium
+            finalAmount = lump_sum + len(familymembers) * premium_amount
             data["pending_amount"] = finalAmount
-            data["amount"] = data["pending_amount"]
+            data["amount"] = finalAmount
 
+            response = super().mutate_and_get_payload(root, info, **data)
             if data['pay_type'] == 'O':
                 if(premium is not None):
                     session = getCheckoutSession( 
