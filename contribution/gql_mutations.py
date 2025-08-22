@@ -132,21 +132,24 @@ class CreatePremiumMutation(OpenIMISMutation):
             family = Family.objects.get(Q(uuid=policy.family.uuid))
             filter = { 'family_uuid': family.uuid , 'is_active': True, 'disability_status': 'no_disability' }
             familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
-            for member in familymembers:
-                age = (datetime.date.today() - member.dob).days // 365
-                if age < 18 or member.disability_status != 'no_disability' or member.is_active == False:
-                    familymembers.pop(familymembers.index(member))
-                if member.is_head_of_family():
-                    familymembers.pop(familymembers.index(member))
-                if member.relationship == 8:
-                    familymembers.pop(familymembers.index(member))
             try:
+                max_age = float(policy.product.age_maximal) if policy.product.age_maximal else 18
                 lump_sum = float(policy.membership_type.price) if policy.membership_type.price else 0.0
                 premium_amount = lump_sum * float(policy.product.premium_adult) /100 if policy.product.premium_adult else 0.0
             except (ValueError, OverflowError, TypeError) as e:
                 lump_sum = 0.0 
                 premium_amount = 0.0
+                max_age = 18
                 # Exception handled, continue with default values
+
+            for member in familymembers:
+                age = (datetime.date.today() - member.dob).days // 365
+                if age < max_age or member.disability_status != 'no_disability' or member.is_active == False:
+                    familymembers.pop(familymembers.index(member))
+                if member.is_head_of_family():
+                    familymembers.pop(familymembers.index(member))
+                if member.relationship == 8:
+                    familymembers.pop(familymembers.index(member))
 
             finalAmount = lump_sum + len(familymembers) * premium_amount
             data["pending_amount"] = finalAmount
