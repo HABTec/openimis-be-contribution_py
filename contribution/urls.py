@@ -1,8 +1,9 @@
 from django.urls import path
-from .views import checkout_cancel, checkout_error, checkout_success
+from .views import checkout_cancel, checkout_error, checkout_success , checkout_notify
 
 urlpatterns = [
      path('contribution-payment/success', checkout_success),
      path('contribution-payment/cancel', checkout_error),
      path('contribution-payment/error', checkout_cancel),
+     path('contribution-payment/notify', checkout_notify),
 ]
