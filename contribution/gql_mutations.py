@@ -23,7 +23,7 @@ import logging
 import random
 import string
 from django.db.models import Q
-
+import uuid
 logger = logging.getLogger(__name__)
 
 
@@ -132,18 +132,24 @@ class CreatePremiumMutation(OpenIMISMutation):
             family = Family.objects.get(Q(uuid=policy.family.uuid))
             filter = { 'family_uuid': family.uuid , 'is_active': True, 'disability_status': 'no_disability' }
             familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
+            premiumUUID = str(uuid.uuid4())
+            data["uuid"] = premiumUUID
             try:
                 max_age = float(policy.product.age_maximal) if policy.product.age_maximal else 18
+                registration_fee = float(policy.product.registration_fee) if policy.product.registration_fee else 0.0
                 lump_sum = float(policy.membership_type.price) if policy.membership_type.price else 0.0
                 premium_amount = lump_sum * float(policy.product.premium_adult) /100 if policy.product.premium_adult else 0.0
             except (ValueError, OverflowError, TypeError) as e:
                 lump_sum = 0.0 
                 premium_amount = 0.0
                 max_age = 18
+                registration_fee = 0.0
                 # Exception handled, continue with default values
-
+            familyLength = len(familymembers)
             for member in familymembers:
                 age = (datetime.date.today() - member.dob).days // 365
+                if member.is_active == False:
+                    familyLength = familyLength - 1
                 if age < max_age or member.disability_status != 'no_disability' or member.is_active == False:
                     familymembers.pop(familymembers.index(member))
                 if member.is_head_of_family():
@@ -151,7 +157,10 @@ class CreatePremiumMutation(OpenIMISMutation):
                 if member.relationship == 8:
                     familymembers.pop(familymembers.index(member))
 
-            finalAmount = lump_sum + len(familymembers) * premium_amount
+            if policy.stage == Policy.STAGE_NEW and policy.product.registration_fee:
+                finalAmount = lump_sum + len(familymembers) * premium_amount + registration_fee
+            else:
+                finalAmount = lump_sum + len(familymembers) * premium_amount
             data["pending_amount"] = finalAmount
             data["amount"] = finalAmount
 
@@ -159,10 +168,10 @@ class CreatePremiumMutation(OpenIMISMutation):
             if data['pay_type'] == 'O':
                 if(premium is not None):
                     session = getCheckoutSession( 
-                        premium.policy.product.name, 
+                        f"Benefit package for a family of {familyLength} members",
                         premium.policy.product.code,
-                        premium.uuid, 
-                        finalAmount)['data']
+                        premiumUUID, 
+                        1)['data']
             
                     
                 response.payment_link = session['paymentUrl']

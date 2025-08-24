@@ -4,7 +4,7 @@ import pprint
 import uuid
 from django.db import migrations
 import requests
-
+import datetime
 class AddFieldPostgres(migrations.AddField):
     def database_forwards(self, app_label, schema_editor, from_state, to_state):
         if schema_editor.connection.vendor == 'postgresql':
@@ -25,8 +25,9 @@ def getCheckoutSession(product_code: str, product_name: str, premiumId: str, amo
     payment_info = {
         "cancelUrl": os.environ.get("PAYMENT_CANCELED_URL")+queryParam,
         "errorUrl": os.environ.get("PAYMENT_ERROR_URL")+queryParam,
-        "notifyUrl": "https://gateway.arifpay.net/test/callback",
+        "notifyUrl": os.environ.get("PAYMENT_NOTIFY_URL")+queryParam,
         "successUrl": os.environ.get("PAYMENT_SUCCESS_URL")+queryParam,
+        "expireDate": (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "paymentMethods": [
             "TELEBIRR"
         ],
@@ -46,7 +47,7 @@ def getCheckoutSession(product_code: str, product_name: str, premiumId: str, amo
             }
         ],
         "lang": "EN",
-        "phone":"251915260951",
+        "phone":"251984621060",
     }
 
 
