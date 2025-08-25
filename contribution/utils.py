@@ -18,7 +18,7 @@ class AddFieldPostgres(migrations.AddField):
         # This is used to describe what the operation does in console output.
         return "Wrapper for AddField that works only for postgres database engine."
 
-def getCheckoutSession(product_code: str, product_name: str, premiumId: str, amount: float):
+def getCheckoutSession(product_code: str, product_name: str, premiumId: str, amount: float , phone: str):
     API_key = os.environ.get("API_KEY")
     queryParam = f"?premiumId={premiumId}"
 
@@ -47,7 +47,7 @@ def getCheckoutSession(product_code: str, product_name: str, premiumId: str, amo
             }
         ],
         "lang": "EN",
-        "phone":"251984621060",
+        "phone":phone,
     }
 
 

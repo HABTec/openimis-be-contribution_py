@@ -40,6 +40,7 @@ class PremiumBase:
     pay_date = graphene.Date()
     pay_type = graphene.String(max_length=1)
     is_offline = graphene.Boolean(required=False)
+    phone_number = graphene.String(required=False)
     is_photo_fee = graphene.Boolean(required=False)
     action = graphene.String(required=False)
     # json_ext = graphene.types.json.JSONString(required=False)
@@ -134,6 +135,7 @@ class CreatePremiumMutation(OpenIMISMutation):
             familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
             premiumUUID = str(uuid.uuid4())
             data["uuid"] = premiumUUID
+            phoneAddress = data["phone_number"] if data['pay_type'] == 'O' else "0984621060"
             try:
                 max_age = float(policy.product.age_maximal) if policy.product.age_maximal else 18
                 registration_fee = float(policy.product.registration_fee) if policy.product.registration_fee else 0.0
@@ -171,7 +173,8 @@ class CreatePremiumMutation(OpenIMISMutation):
                         f"Benefit package for a family of {familyLength} members",
                         premium.policy.product.code,
                         premiumUUID, 
-                        1)['data']
+                        1,
+                        phoneAddress)['data']
             
                     
                 response.payment_link = session['paymentUrl']
