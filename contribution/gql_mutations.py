@@ -135,29 +135,32 @@ class CreatePremiumMutation(OpenIMISMutation):
             familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
             premiumUUID = str(uuid.uuid4())
             data["uuid"] = premiumUUID
-            phoneAddress = data["phone_number"] if data['pay_type'] == 'O' else "0984621060"
-            try:
-                max_age = float(policy.product.age_maximal) if policy.product.age_maximal else 18
-                registration_fee = float(policy.product.registration_fee) if policy.product.registration_fee else 0.0
-                lump_sum = float(policy.membership_type.price) if policy.membership_type.price else 0.0
-                premium_amount = lump_sum * float(policy.product.premium_adult) /100 if policy.product.premium_adult else 0.0
-            except (ValueError, OverflowError, TypeError) as e:
-                lump_sum = 0.0 
-                premium_amount = 0.0
-                max_age = 18
-                registration_fee = 0.0
-                # Exception handled, continue with default values
+            phoneAddress = data["phone_number"] 
+
+            max_age = float(policy.product.age_maximal) if policy.product.age_maximal else 18
+            registration_fee = float(policy.product.registration_fee) if policy.product.registration_fee else 0.0
+            lump_sum = float(policy.membership_type.price) if policy.membership_type and policy.membership_type.price else 0.0
+            premium_amount = lump_sum * float(policy.product.premium_adult) /100 if policy.product.premium_adult else 0.0
+
             familyLength = len(familymembers)
+            filtered_familymembers = []
             for member in familymembers:
                 age = (datetime.date.today() - member.dob).days // 365
-                if member.is_active == False:
-                    familyLength = familyLength - 1
-                if age < max_age or member.disability_status != 'no_disability' or member.is_active == False:
-                    familymembers.pop(familymembers.index(member))
-                if member.is_head_of_family():
-                    familymembers.pop(familymembers.index(member))
-                if member.relationship == 8:
-                    familymembers.pop(familymembers.index(member))
+
+                if not member.is_active:
+                    familyLength -= 1
+                if (
+                    age < max_age
+                    or member.disability_status != 'no_disability'
+                    or not member.is_active
+                    or member.is_head_of_family()
+                    or member.relationship == 8
+                ):
+                    continue 
+
+                filtered_familymembers.append(member)
+
+            familymembers = filtered_familymembers
 
             if policy.stage == Policy.STAGE_NEW and policy.product.registration_fee:
                 finalAmount = lump_sum + len(familymembers) * premium_amount + registration_fee
@@ -165,7 +168,7 @@ class CreatePremiumMutation(OpenIMISMutation):
                 finalAmount = lump_sum + len(familymembers) * premium_amount
             data["pending_amount"] = finalAmount
             data["amount"] = finalAmount
-
+            data.pop('phone_number', None)
             response = super().mutate_and_get_payload(root, info, **data)
             if data['pay_type'] == 'O':
                 if(premium is not None):
@@ -173,7 +176,7 @@ class CreatePremiumMutation(OpenIMISMutation):
                         f"Benefit package for a family of {familyLength} members",
                         premium.policy.product.code,
                         premiumUUID, 
-                        1,
+                        finalAmount,
                         phoneAddress)['data']
             
                     

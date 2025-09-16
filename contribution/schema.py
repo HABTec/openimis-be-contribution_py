@@ -108,7 +108,7 @@ class Query(graphene.ObjectType):
         try:
             max_age = float(policy.product.age_maximal) if policy.product.age_maximal else 18
             registration_fee = float(policy.product.registration_fee) if policy.product.registration_fee else 0.0
-            lump_sum = float(policy.membership_type.price) if policy.membership_type.price else 0.0
+            lump_sum = float(policy.membership_type.price) if policy.membership_type and policy.membership_type.price else 0.0
             premium_amount = lump_sum * float(policy.product.premium_adult) /100 if policy.product.premium_adult else 0.0
         except (ValueError, OverflowError, TypeError) as e:
             lump_sum = 0.0 
