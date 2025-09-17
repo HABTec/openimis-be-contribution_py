@@ -182,9 +182,9 @@ class CreatePremiumMutation(OpenIMISMutation):
                         phoneAddress)['data']
             
                     
-                response.payment_link = session['paymentUrl']
-                premium.receipt = session['sessionId'] if (session['sessionId'])  else premium.receipt
-                premium.save()
+                    response.payment_link = session['paymentUrl']
+                    premium.receipt = session['sessionId'] if (session['sessionId'])  else premium.receipt
+                    premium.save()
             return response
             
 
