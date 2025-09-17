@@ -166,11 +166,13 @@ class CreatePremiumMutation(OpenIMISMutation):
                 finalAmount = lump_sum + len(familymembers) * premium_amount + registration_fee
             else:
                 finalAmount = lump_sum + len(familymembers) * premium_amount
+
+
             data["pending_amount"] = finalAmount
             data["amount"] = finalAmount
             data.pop('phone_number', None)
             response = super().mutate_and_get_payload(root, info, **data)
-            if data['pay_type'] == 'O':
+            if data['pay_type'] == 'O' and finalAmount != 0:
                 if(premium is not None):
                     session = getCheckoutSession( 
                         f"Benefit package for a family of {familyLength} members",
