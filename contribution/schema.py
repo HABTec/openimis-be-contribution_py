@@ -4,6 +4,7 @@ import graphene_django_optimizer as gql_optimizer
 
 from .apps import ContributionConfig
 from location.apps import LocationConfig
+from product.apps import ProductConfig
 from django.utils.translation import gettext as _
 from core.schema import signal_mutation_module_before_mutating, OrderedDjangoFilterConnectionField, filter_validity
 from core.services import wait_for_mutation
@@ -12,6 +13,8 @@ from .gql_queries import *  # lgtm [py/polluting-import]
 from .gql_mutations import *  # lgtm [py/polluting-import]
 from .services import check_unique_premium_receipt_code_within_product
 from graphql.language.ast import Field as ASTField
+from contribution.models import Premium
+from payment.models import PaymentDetail
 def ast_to_dict(node, with_location=False):
     if isinstance(node, list):
         return [ast_to_dict(item, with_location) for item in node]
@@ -94,10 +97,14 @@ class Query(graphene.ObjectType):
     )
 
     calculate_total_premiums = graphene.Field(
-        graphene.JSONString,
-        policy_uuid=graphene.String(required=True)
+        CalculatedPremiumDetailsType,
+        policy_uuid=graphene.String(required=True),
+        contribution_uuid=graphene.String(required=False),
         )
         
+
+
+
     def resolve_calculate_total_premiums(self, info, **kwargs):
         data = kwargs
         policyId = data["policy_uuid"]
@@ -142,8 +149,17 @@ class Query(graphene.ObjectType):
             finalAmount = lump_sum + len(familymembers) * premium_amount + registration_fee
         else:
             finalAmount = lump_sum + len(familymembers) * premium_amount
+        if 'contribution_uuid' in data:
+            contributionId = data["contribution_uuid"]
+            premiums = Premium.objects.filter(uuid=contributionId).first()
+            if premiums is not None:
+                if premiums.pay_type == 'P':
+                    paymentDetail = PaymentDetail.objects.filter(Q(premium=premiums)).first()
+                    response['matching_payment_id'] = paymentDetail.payment.id if paymentDetail else None
+
         response['total_amount'] = finalAmount
         response['additional_members'] = additional_members
+        response['family_id'] = str(family.id)
         return response
 
     def resolve_premiums(self, info, **kwargs):
@@ -163,6 +179,7 @@ class Query(graphene.ObjectType):
         if not show_history and not kwargs.get('uuid', None):
             filters += filter_validity(**kwargs)
         parent_location = kwargs.get('parent_location')
+        productconfig = ProductConfig.penalityConfig
         if parent_location is not None:
             parent_location_level = kwargs.get('parent_location_level')
             if parent_location_level is None:
