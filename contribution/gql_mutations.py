@@ -1,10 +1,10 @@
 import pprint
-from contribution.services import premium_updated
+from contribution.services import premium_updated , calculate_expression
 from contribution.utils import getCheckoutSession
 from policy.models import Policy
 from typing import Optional
 from core.models import filter_validity
-
+from datetime import date as dt
 import graphene
 from contribution.apps import ContributionConfig
 from contribution.models import Premium, PremiumMutation
@@ -24,6 +24,9 @@ import random
 import string
 from django.db.models import Q
 import uuid
+from payment.models import Payment
+from payment.services import update_or_create_payment , update_or_create_payment_detail
+import math
 logger = logging.getLogger(__name__)
 
 
@@ -95,6 +98,8 @@ class CreatePremiumMutation(OpenIMISMutation):
     _mutation_class = "CreatePremiumMutation"
 
     payment_link = graphene.String()
+    payment_id = graphene.String()
+    contribution_id = graphene.String()
 
     class Input(PremiumBase, OpenIMISMutation.Input):
         pass
@@ -111,7 +116,7 @@ class CreatePremiumMutation(OpenIMISMutation):
                 raise Exception(_("pay_date_required_for_offline_premium"))
             if data['pay_type'] == 'F' and data['receipt'] is None:
                 raise Exception(_("receit_is_required_for_offline_premium"))
-            if data['pay_type'] == 'O':
+            if data['pay_type'] == 'O' or data['pay_type']== 'P':
                 data['pay_date'] = datetime.datetime.now()
                 data['receipt'] = ''.join(random.choices(string.ascii_letters + string.digits, k=50))
 
@@ -135,7 +140,7 @@ class CreatePremiumMutation(OpenIMISMutation):
             familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
             premiumUUID = str(uuid.uuid4())
             data["uuid"] = premiumUUID
-            phoneAddress = data["phone_number"] 
+            phoneAddress = data["phone_number"] if data['pay_type'] == 'O' else None
 
             max_age = float(policy.product.age_maximal) if policy.product.age_maximal else 18
             registration_fee = float(policy.product.registration_fee) if policy.product.registration_fee else 0.0
@@ -159,19 +164,27 @@ class CreatePremiumMutation(OpenIMISMutation):
                     continue 
 
                 filtered_familymembers.append(member)
-
+            additionalWifes = sum(1 for member in familymembers if member.relationship == 8) - 1
             familymembers = filtered_familymembers
-
+            if additionalWifes < 0:
+                additionalWifes = 0
             if policy.stage == Policy.STAGE_NEW and policy.product.registration_fee:
-                finalAmount = lump_sum + len(familymembers) * premium_amount + registration_fee
+                finalAmount = lump_sum + len(familymembers) * premium_amount + registration_fee + additionalWifes * policy.product.additional_spouse_contribution * lump_sum
             else:
-                finalAmount = lump_sum + len(familymembers) * premium_amount
+                finalAmount = lump_sum + len(familymembers) * premium_amount + float(additionalWifes) * float(policy.product.additional_spouse_contribution) * lump_sum
 
-
-            data["pending_amount"] = finalAmount
-            data["amount"] = finalAmount
-            data.pop('phone_number', None)
+            unpaidYears = 0
+            previousPolicies = Policy.filter_queryset(None).filter(family= policy.family.id , status__in=[Policy.STATUS_READY, Policy.STATUS_EXPIRED, Policy.STATUS_ACTIVE]).first()
+            if previousPolicies:
+                days = dt.today() - previousPolicies.expiry_date
+                unpaidYears = math.floor(days.days / 365)
+            panishment = calculate_expression(policy.product.penalityFormula,unpaidYears, finalAmount) if policy.product.penalityFormula else 0.0
+            finalAmount = finalAmount + panishment
+            data["pending_amount"] = data["amount"] = finalAmount
+            
+            data.pop('phone_number', None) if data['pay_type'] == 'O' else None
             response = super().mutate_and_get_payload(root, info, **data)
+            response.contribution_id = premiumUUID
             if data['pay_type'] == 'O' and finalAmount != 0:
                 if(premium is not None):
                     session = getCheckoutSession( 
@@ -185,6 +198,17 @@ class CreatePremiumMutation(OpenIMISMutation):
                     response.payment_link = session['paymentUrl']
                     premium.receipt = session['sessionId'] if (session['sessionId'])  else premium.receipt
                     premium.save()
+            if data['pay_type'] == 'P':
+                payload = {
+                    "client_mutation_label": "Create payment",
+                    "type_of_payment": "P",
+                    "status": 1,
+                    "expected_amount": finalAmount,
+                }
+                payment = update_or_create_payment(payload, payload)
+                update_or_create_payment_detail(payment, premiumUUID)
+                response.payment_id = payment.uuid
+                
             return response
             
 

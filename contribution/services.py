@@ -294,3 +294,18 @@ def create_premium(premium, user, action = None):
     # Handle the policy updating
     premium_updated(premium, action)
     return premium
+
+def calculate_expression(expression: str, year: int, calculated_premium: float) -> float:
+    # Replace placeholders with actual values
+    formatted_expr = expression.format(
+        Year=year,
+        CalculatedPremium=calculated_premium
+    )
+
+    try:
+        # Evaluate the mathematical expression safely
+        result = eval(formatted_expr, {"__builtins__": None}, {})
+        return result
+    except Exception as e:
+        raise ValueError(f"Invalid expression: {e}")
+
