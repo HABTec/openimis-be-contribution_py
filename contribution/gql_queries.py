@@ -33,7 +33,13 @@ class PremiumGQLType(DjangoObjectType):
         premium_mutation = self.mutations.select_related(
             'mutation').filter(mutation__status=0).first()
         return premium_mutation.mutation.client_mutation_id if premium_mutation else None
-
+class CalculatedPremiumDetailsType(graphene.ObjectType):
+    total_amount = graphene.Float()
+    additional_members = graphene.Int()
+    family_id = graphene.String()
+    family_size = graphene.Int()
+    premium_value = graphene.Float()
+    matching_payment_id = graphene.String()
 
 class PremiumMutationGQLType(DjangoObjectType):
     class Meta:
