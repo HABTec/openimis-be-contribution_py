@@ -146,6 +146,8 @@ class CreatePremiumMutation(OpenIMISMutation):
             registration_fee = float(policy.product.registration_fee) if policy.product.registration_fee else 0.0
             lump_sum = float(policy.membership_type.price) if policy.membership_type and policy.membership_type.price else 0.0
             premium_amount = lump_sum * float(policy.product.premium_adult) /100 if policy.product.premium_adult else 0.0
+            additional_spouse_contribution = float(policy.product.additional_spouse_contribution) if policy.product.additional_spouse_contribution else 0.0
+            penalityFormula = policy.product.penality_formula if policy.product.penality_formula else None
 
             familyLength = len(familymembers)
             filtered_familymembers = []
@@ -164,21 +166,21 @@ class CreatePremiumMutation(OpenIMISMutation):
                     continue 
 
                 filtered_familymembers.append(member)
-            additionalWifes = sum(1 for member in familymembers if member.relationship == 8) - 1
+            additionalWifes = float(sum(1 for member in familymembers if member.relationship == 8) - 1)
             familymembers = filtered_familymembers
             if additionalWifes < 0:
                 additionalWifes = 0
             if policy.stage == Policy.STAGE_NEW and policy.product.registration_fee:
-                finalAmount = lump_sum + len(familymembers) * premium_amount + registration_fee + additionalWifes * policy.product.additional_spouse_contribution * lump_sum
+                finalAmount = lump_sum + float(len(familymembers)) * premium_amount + registration_fee + additionalWifes * additional_spouse_contribution * lump_sum
             else:
-                finalAmount = lump_sum + len(familymembers) * premium_amount + float(additionalWifes) * float(policy.product.additional_spouse_contribution) * lump_sum
+                finalAmount = lump_sum + float(len(familymembers)) * premium_amount + float(additionalWifes) * float(additional_spouse_contribution) * lump_sum
 
             unpaidYears = 0
             previousPolicies = Policy.filter_queryset(None).filter(family= policy.family.id , status__in=[Policy.STATUS_READY, Policy.STATUS_EXPIRED, Policy.STATUS_ACTIVE]).first()
             if previousPolicies:
                 days = dt.today() - previousPolicies.expiry_date
                 unpaidYears = math.floor(days.days / 365)
-            panishment = calculate_expression(policy.product.penalityFormula,unpaidYears, finalAmount) if policy.product.penalityFormula else 0.0
+            panishment = calculate_expression(penalityFormula,unpaidYears, finalAmount) if penalityFormula else 0.0
             finalAmount = finalAmount + panishment
             data["pending_amount"] = data["amount"] = finalAmount
             
@@ -205,8 +207,8 @@ class CreatePremiumMutation(OpenIMISMutation):
                     "status": 1,
                     "expected_amount": finalAmount,
                 }
-                payment = update_or_create_payment(payload, payload)
-                update_or_create_payment_detail(payment, premiumUUID)
+                payment = update_or_create_payment(payload, payload )
+                update_or_create_payment_detail(payment, premiumUUID, info.context.user if info.context and info.context.user else None)
                 response.payment_id = payment.uuid
                 
             return response
