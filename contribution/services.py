@@ -11,8 +11,12 @@ from location.apps import LocationConfig
 from location.models import Location
 from policy.models import Policy
 from policy.services import policy_status_premium_paid
-
+import uuid
 from .models import Premium, PayTypeChoices
+from core import datetime
+import math
+from datetime import date as dt
+
 
 logger = logging.getLogger(__name__)
 
@@ -288,6 +292,7 @@ def update_premium(existing_premium, premium, user, action = None):
 
 
 def create_premium(premium, user, action = None):
+    
     if check_unique_premium_receipt_code_within_product(code=premium.receipt, policy=premium.policy):
         raise ValidationError(_("mutation.code_already_taken"))
     premium.save()
@@ -309,3 +314,56 @@ def calculate_expression(expression: str, year: int, calculated_premium: float) 
     except Exception as e:
         raise ValueError(f"Invalid expression: {e}")
 
+def calculate_premium(policyId):
+    policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
+    family = Family.objects.get(Q(uuid=policy.family.uuid))
+    filter = { 'family_uuid': family.uuid , 'is_active': True, 'disability_status': 'no_disability' }
+    familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
+
+    max_age = float(policy.product.age_maximal) if policy.product.age_maximal else 18
+    registration_fee = float(policy.product.registration_fee) if policy.product.registration_fee else 0.0
+    lump_sum = float(policy.membership_type.price) if policy.membership_type and policy.membership_type.price else 0.0
+    premium_amount = lump_sum * float(policy.product.premium_adult) /100 if policy.product.premium_adult else 0.0
+    additional_spouse_contribution = float(policy.product.additional_spouse_contribution) if policy.product.additional_spouse_contribution else 0.0
+    penalityFormula = policy.product.penality_formula if policy.product.penality_formula else None
+
+    familyLength = len(familymembers)
+    description = {
+            "premium_value": lump_sum,
+            "family_size": familyLength,
+        }
+    filtered_familymembers = []
+    for member in familymembers:
+        age = (datetime.date.today() - member.dob).days // 365
+
+        if not member.is_active:
+            familyLength -= 1
+        if (
+            age < max_age
+            or member.disability_status != 'no_disability'
+            or not member.is_active
+            or member.is_head_of_family()
+            or member.relationship == 8
+        ):
+            continue 
+
+        filtered_familymembers.append(member)
+    additionalWifes = sum(1 for member in familymembers if member.relationship == 8) - 1
+    familymembers = filtered_familymembers
+    if additionalWifes < 0:
+        additionalWifes = 0
+    if policy.stage == Policy.STAGE_NEW and policy.product.registration_fee:
+        finalAmount = lump_sum + len(familymembers) * premium_amount + registration_fee + additionalWifes * additional_spouse_contribution * lump_sum
+    else:
+        finalAmount = lump_sum + len(familymembers) * premium_amount + float(additionalWifes) * float(additional_spouse_contribution) * lump_sum
+
+    unpaidYears = 0
+    previousPolicies = Policy.filter_queryset(None).filter(family= policy.family.id , status__in=[Policy.STATUS_READY, Policy.STATUS_EXPIRED, Policy.STATUS_ACTIVE]).first()
+    if previousPolicies:
+        days = dt.today() - previousPolicies.expiry_date
+        unpaidYears = math.floor(days.days / 365)
+    panishment = calculate_expression(penalityFormula,unpaidYears, finalAmount) if penalityFormula else 0.0
+    finalAmount = finalAmount + panishment
+    description['total_amount'] = finalAmount
+    description['family_id'] = str(family.id)
+    return finalAmount , description
