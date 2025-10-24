@@ -108,59 +108,9 @@ class Query(graphene.ObjectType):
     def resolve_calculate_total_premiums(self, info, **kwargs):
         data = kwargs
         policyId = data["policy_uuid"]
-        policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
-        family = Family.objects.get(Q(uuid=policy.family.uuid))
-        filter = { 'family_uuid': family.uuid , 'is_active': True, 'disability_status': 'no_disability' }
-        familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
-        try:
-            max_age = float(policy.product.age_maximal) if policy.product.age_maximal else 18
-            registration_fee = float(policy.product.registration_fee) if policy.product.registration_fee else 0.0
-            lump_sum = float(policy.membership_type.price) if policy.membership_type and policy.membership_type.price else 0.0
-            premium_amount = lump_sum * float(policy.product.premium_adult) /100 if policy.product.premium_adult else 0.0
-        except (ValueError, OverflowError, TypeError) as e:
-            lump_sum = 0.0 
-            premium_amount = 0.0
-            max_age = 18
-            registration_fee = 0.0
-            # Exception handled, continue with default values
-        familyLength = len(familymembers)
-        response = {
-            "premium_value": lump_sum,
-            "family_size": familyLength,
-            "additional_members": familyLength - len(familymembers),
-        }
-        additional_members = 0
-        for index , member in enumerate(familymembers):
-            age = (datetime.date.today() - member.dob).days // 365
-            if member.is_active == False:
-                familyLength = familyLength - 1
-            if age > max_age and member.relationship != 8:
-                additional_members = additional_members + 1
-            if age < max_age or member.disability_status != 'no_disability' or member.is_active == False:
-                familymembers.pop(index)
-                continue
-            if member.is_head_of_family():
-                familymembers.pop(index)
-                continue
-            if member.relationship == 8:
-                familymembers.pop(index)
-
-        if policy.stage == Policy.STAGE_NEW and policy.product.registration_fee:
-            finalAmount = lump_sum + len(familymembers) * premium_amount + registration_fee
-        else:
-            finalAmount = lump_sum + len(familymembers) * premium_amount
-        if 'contribution_uuid' in data:
-            contributionId = data["contribution_uuid"]
-            premiums = Premium.objects.filter(uuid=contributionId).first()
-            if premiums is not None:
-                if premiums.pay_type == 'P':
-                    paymentDetail = PaymentDetail.objects.filter(Q(premium=premiums)).first()
-                    response['matching_payment_id'] = paymentDetail.payment.id if paymentDetail else None
-
-        response['total_amount'] = finalAmount
-        response['additional_members'] = additional_members
-        response['family_id'] = str(family.id)
-        return response
+        finalAmount , description = calculate_premium(policyId)
+        return description
+        
 
     def resolve_premiums(self, info, **kwargs):
         fields = get_fields(info)

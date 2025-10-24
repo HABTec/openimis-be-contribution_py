@@ -27,6 +27,7 @@ import uuid
 from payment.models import Payment
 from payment.services import update_or_create_payment , update_or_create_payment_detail
 import math
+from contribution.services import calculate_premium
 logger = logging.getLogger(__name__)
 
 
@@ -135,53 +136,11 @@ class CreatePremiumMutation(OpenIMISMutation):
             policyId = data["policy_uuid"]
             policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
             premium = Premium.objects.select_related("policy__product").filter( policy=policy).first()
-            family = Family.objects.get(Q(uuid=policy.family.uuid))
-            filter = { 'family_uuid': family.uuid , 'is_active': True, 'disability_status': 'no_disability' }
-            familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
             premiumUUID = str(uuid.uuid4())
             data["uuid"] = premiumUUID
             phoneAddress = data["phone_number"] if data['pay_type'] == 'O' else None
 
-            max_age = float(policy.product.age_maximal) if policy.product.age_maximal else 18
-            registration_fee = float(policy.product.registration_fee) if policy.product.registration_fee else 0.0
-            lump_sum = float(policy.membership_type.price) if policy.membership_type and policy.membership_type.price else 0.0
-            premium_amount = lump_sum * float(policy.product.premium_adult) /100 if policy.product.premium_adult else 0.0
-            additional_spouse_contribution = float(policy.product.additional_spouse_contribution) if policy.product.additional_spouse_contribution else 0.0
-            penalityFormula = policy.product.penality_formula if policy.product.penality_formula else None
-
-            familyLength = len(familymembers)
-            filtered_familymembers = []
-            for member in familymembers:
-                age = (datetime.date.today() - member.dob).days // 365
-
-                if not member.is_active:
-                    familyLength -= 1
-                if (
-                    age < max_age
-                    or member.disability_status != 'no_disability'
-                    or not member.is_active
-                    or member.is_head_of_family()
-                    or member.relationship == 8
-                ):
-                    continue 
-
-                filtered_familymembers.append(member)
-            additionalWifes = float(sum(1 for member in familymembers if member.relationship == 8) - 1)
-            familymembers = filtered_familymembers
-            if additionalWifes < 0:
-                additionalWifes = 0
-            if policy.stage == Policy.STAGE_NEW and policy.product.registration_fee:
-                finalAmount = lump_sum + float(len(familymembers)) * premium_amount + registration_fee + additionalWifes * additional_spouse_contribution * lump_sum
-            else:
-                finalAmount = lump_sum + float(len(familymembers)) * premium_amount + float(additionalWifes) * float(additional_spouse_contribution) * lump_sum
-
-            unpaidYears = 0
-            previousPolicies = Policy.filter_queryset(None).filter(family= policy.family.id , status__in=[Policy.STATUS_READY, Policy.STATUS_EXPIRED, Policy.STATUS_ACTIVE]).first()
-            if previousPolicies:
-                days = dt.today() - previousPolicies.expiry_date
-                unpaidYears = math.floor(days.days / 365)
-            panishment = calculate_expression(penalityFormula,unpaidYears, finalAmount) if penalityFormula else 0.0
-            finalAmount = finalAmount + panishment
+            finalAmount = calculate_premium(policyId)
             data["pending_amount"] = data["amount"] = finalAmount
             
             data.pop('phone_number', None) if data['pay_type'] == 'O' else None
@@ -190,7 +149,7 @@ class CreatePremiumMutation(OpenIMISMutation):
             if data['pay_type'] == 'O' and finalAmount != 0:
                 if(premium is not None):
                     session = getCheckoutSession( 
-                        f"Benefit package for a family of {familyLength} members",
+                        f"Benefit package",
                         premium.policy.product.code,
                         premiumUUID, 
                         finalAmount,
