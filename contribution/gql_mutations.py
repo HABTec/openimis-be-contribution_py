@@ -149,7 +149,7 @@ class CreatePremiumMutation(OpenIMISMutation):
             if data['pay_type'] == 'O' and finalAmount != 0:
                 if(premium is not None):
                     session = getCheckoutSession( 
-                        f"Benefit package",
+                        f"Benefit package for a family of {desc['family_size']} members",
                         premium.policy.product.code,
                         premiumUUID, 
                         finalAmount,
