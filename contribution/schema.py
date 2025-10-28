@@ -108,7 +108,8 @@ class Query(graphene.ObjectType):
     def resolve_calculate_total_premiums(self, info, **kwargs):
         data = kwargs
         policyId = data["policy_uuid"]
-        finalAmount , description = calculate_premium(policyId)
+        contributionId = kwargs.get("contribution_uuid")
+        finalAmount , description = calculate_premium(policyId ,contributionId)
         return description
         
 

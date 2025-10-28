@@ -16,6 +16,7 @@ from .models import Premium, PayTypeChoices
 from core import datetime
 import math
 from datetime import date as dt
+from payment.models import PaymentDetail
 
 
 logger = logging.getLogger(__name__)
@@ -314,7 +315,7 @@ def calculate_expression(expression: str, year: int, calculated_premium: float) 
     except Exception as e:
         raise ValueError(f"Invalid expression: {e}")
 
-def calculate_premium(policyId):
+def calculate_premium(policyId , contributionId = None):
     policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
     family = Family.objects.get(Q(uuid=policy.family.uuid))
     filter = { 'family_uuid': family.uuid , 'is_active': True, 'disability_status': 'no_disability' }
@@ -356,7 +357,12 @@ def calculate_premium(policyId):
         finalAmount = lump_sum + len(familymembers) * premium_amount + registration_fee + additionalWifes * additional_spouse_contribution * lump_sum
     else:
         finalAmount = lump_sum + len(familymembers) * premium_amount + float(additionalWifes) * float(additional_spouse_contribution) * lump_sum
-
+    if contributionId is not None:
+        premiums = Premium.objects.filter(uuid=contributionId).first()
+        if premiums is not None:
+            if premiums.pay_type == 'P':
+                paymentDetail = PaymentDetail.objects.filter(Q(premium=premiums)).first()
+                description['matching_payment_id'] = paymentDetail.payment.id if paymentDetail else None
     unpaidYears = 0
     previousPolicies = Policy.filter_queryset(None).filter(family= policy.family.id , status__in=[Policy.STATUS_READY, Policy.STATUS_EXPIRED, Policy.STATUS_ACTIVE]).first()
     if previousPolicies:
