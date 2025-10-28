@@ -334,9 +334,11 @@ def calculate_premium(policyId , contributionId = None):
             "family_size": familyLength,
         }
     filtered_familymembers = []
+    additional_members = 0
     for member in familymembers:
         age = (datetime.date.today() - member.dob).days // 365
-
+        if age > max_age and member.relationship != 8 and member.head == False:
+            additional_members = additional_members + 1
         if not member.is_active:
             familyLength -= 1
         if (
@@ -371,5 +373,6 @@ def calculate_premium(policyId , contributionId = None):
     panishment = calculate_expression(penalityFormula,unpaidYears, finalAmount) if penalityFormula else 0.0
     finalAmount = finalAmount + panishment
     description['total_amount'] = finalAmount
+    description['additional_members'] = additional_members
     description['family_id'] = str(family.id)
     return finalAmount , description
