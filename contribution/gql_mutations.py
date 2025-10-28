@@ -140,7 +140,7 @@ class CreatePremiumMutation(OpenIMISMutation):
             data["uuid"] = premiumUUID
             phoneAddress = data["phone_number"] if data['pay_type'] == 'O' else None
 
-            finalAmount = calculate_premium(policyId)
+            finalAmount , desc = calculate_premium(policyId)
             data["pending_amount"] = data["amount"] = finalAmount
             
             data.pop('phone_number', None) if data['pay_type'] == 'O' else None
