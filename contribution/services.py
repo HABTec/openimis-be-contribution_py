@@ -325,7 +325,7 @@ def calculate_premium(policyId , contributionId = None):
     registration_fee = float(policy.product.registration_fee) if policy.product.registration_fee else 0.0
     lump_sum = float(policy.membership_type.price) if policy.membership_type and policy.membership_type.price else 0.0
     premium_amount = lump_sum * float(policy.product.premium_adult) /100 if policy.product.premium_adult else 0.0
-    additional_spouse_contribution = float(policy.product.additional_spouse_contribution) if policy.product.additional_spouse_contribution else 0.0
+    additional_spouse_contribution = float(policy.product.additional_spouse_contribution)/100 if policy.product.additional_spouse_contribution else 0.0
     penalityFormula = policy.product.penality_formula if policy.product.penality_formula else None
 
     familyLength = len(familymembers)
@@ -333,11 +333,10 @@ def calculate_premium(policyId , contributionId = None):
             "premium_value": lump_sum,
             "family_size": familyLength,
         }
-    filtered_familymembers = []
     additional_members = 0
     for member in familymembers:
         age = (datetime.date.today() - member.dob).days // 365
-        if age > max_age and member.relationship != 8 and member.head == False:
+        if age > max_age and member.relationship_id != 8 and not member.is_head_of_family() and  member.is_active:
             additional_members = additional_members + 1
         if not member.is_active:
             familyLength -= 1
@@ -346,19 +345,18 @@ def calculate_premium(policyId , contributionId = None):
             or member.disability_status != 'no_disability'
             or not member.is_active
             or member.is_head_of_family()
-            or member.relationship == 8
+            or member.relationship_id == 8
         ):
             continue 
 
-        filtered_familymembers.append(member)
-    additionalWifes = sum(1 for member in familymembers if member.relationship == 8) - 1
-    familymembers = filtered_familymembers
+    additionalWifes = sum(1 for member in familymembers if member.relationship_id == 8) - 1
+    
     if additionalWifes < 0:
         additionalWifes = 0
+    finalAmount = lump_sum + additional_members * premium_amount + float(additionalWifes) * float(additional_spouse_contribution) * lump_sum
     if policy.stage == Policy.STAGE_NEW and policy.product.registration_fee:
-        finalAmount = lump_sum + len(familymembers) * premium_amount + registration_fee + additionalWifes * additional_spouse_contribution * lump_sum
-    else:
-        finalAmount = lump_sum + len(familymembers) * premium_amount + float(additionalWifes) * float(additional_spouse_contribution) * lump_sum
+        finalAmount =finalAmount + registration_fee 
+
     if contributionId is not None:
         premiums = Premium.objects.filter(uuid=contributionId).first()
         if premiums is not None:
@@ -375,4 +373,6 @@ def calculate_premium(policyId , contributionId = None):
     description['total_amount'] = finalAmount
     description['additional_members'] = additional_members
     description['family_id'] = str(family.id)
+    description['additional_wifes'] = additionalWifes
+    description['unpayed_years'] = unpaidYears
     return finalAmount , description
