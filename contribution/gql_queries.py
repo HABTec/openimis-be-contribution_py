@@ -40,6 +40,8 @@ class CalculatedPremiumDetailsType(graphene.ObjectType):
     family_size = graphene.Int()
     premium_value = graphene.Float()
     matching_payment_id = graphene.String()
+    additional_wifes = graphene.Int()
+    unpayed_years = graphene.Int()
 
 class PremiumMutationGQLType(DjangoObjectType):
     class Meta:
