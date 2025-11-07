@@ -159,13 +159,15 @@ class CreatePremiumMutation(OpenIMISMutation):
                     response.payment_link = session['paymentUrl']
                     premium.receipt = session['sessionId'] if (session['sessionId'])  else premium.receipt
                     premium.save()
-            if data['pay_type'] == 'P':
+            if data['pay_type'] == 'P' or data['pay_type'] == 'F':
                 payload = {
                     "client_mutation_label": "Create payment",
-                    "type_of_payment": "P",
+                    "type_of_payment": data['pay_type'],
                     "status": 1,
                     "expected_amount": finalAmount,
                 }
+                if data['pay_type'] == 'F':
+                    payload['receipt_no'] = data['receipt']
                 payment = update_or_create_payment(payload, payload )
                 update_or_create_payment_detail(payment, premiumUUID, info.context.user if info.context and info.context.user else None)
                 response.payment_id = payment.uuid
