@@ -331,6 +331,8 @@ def calculate_premium(policyId , contributionId = None):
     familyLength = len(familymembers)
     description = {
             "premium_value": lump_sum,
+            "premium_adult": policy.product.premium_adult if policy.product.premium_adult else 0.0,
+            "additional_spouse_contribution": additional_spouse_contribution,
             "family_size": familyLength,
         }
     additional_members = 0
@@ -375,4 +377,5 @@ def calculate_premium(policyId , contributionId = None):
     description['family_id'] = str(family.id)
     description['additional_wifes'] = additionalWifes
     description['unpayed_years'] = unpaidYears
+    description['penality_formula'] = penalityFormula
     return finalAmount , description
