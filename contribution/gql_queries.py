@@ -42,6 +42,10 @@ class CalculatedPremiumDetailsType(graphene.ObjectType):
     matching_payment_id = graphene.String()
     additional_wifes = graphene.Int()
     unpayed_years = graphene.Int()
+    premium_adult = graphene.Float()
+    additional_spouse_contribution = graphene.Float()
+    penality_formula = graphene.String()
+    unpayed_years = graphene.Int()
 
 class PremiumMutationGQLType(DjangoObjectType):
     class Meta:
