@@ -316,8 +316,8 @@ def calculate_expression(expression: str, year: int, calculated_premium: float) 
         raise ValueError(f"Invalid expression: {e}")
 
 def calculate_premium(policyId , contributionId = None):
-    policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
-    family = Family.objects.get(Q(uuid=policy.family.uuid))
+    policy = Policy.filter_queryset(None).filter(uuid=policyId ).first()
+    family = Family.objects.get(Q(uuid=policy.family.uuid , validity_to=None))
     filter = { 'family_uuid': family.uuid , 'is_active': True, 'disability_status': 'no_disability' }
     familymembers = list(Insuree.objects.filter(Q(family=family), *filter_validity(**filter)).order_by('-head', 'dob'))
 
