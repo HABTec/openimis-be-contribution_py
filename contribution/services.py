@@ -333,14 +333,13 @@ def calculate_premium(policyId , contributionId = None):
             "premium_value": lump_sum,
             "premium_adult": policy.product.premium_adult if policy.product.premium_adult else 0.0,
             "additional_spouse_contribution": additional_spouse_contribution,
-            "family_size": familyLength,
         }
     additional_members = 0
     for member in familymembers:
         age = (datetime.date.today() - member.dob).days // 365
-        if age > max_age and member.relationship_id != 8 and not member.is_head_of_family() and  member.is_active:
+        if age > max_age and member.relationship_id != 8 and not member.is_head_of_family() and not member.status in [InsureeStatus.INACTIVE, InsureeStatus.DEAD]:
             additional_members = additional_members + 1
-        if not member.is_active:
+        if  member.status in [InsureeStatus.INACTIVE, InsureeStatus.DEAD]:
             familyLength -= 1
         if (
             age < max_age
@@ -352,7 +351,7 @@ def calculate_premium(policyId , contributionId = None):
         ):
             continue 
 
-    additionalWifes = sum(1 for member in familymembers if member.relationship_id == 8) - 1
+    additionalWifes = sum(1 for member in familymembers if member.relationship_id == 8 and member.status not in [InsureeStatus.INACTIVE, InsureeStatus.DEAD]) - 1
     
     if additionalWifes < 0:
         additionalWifes = 0
@@ -367,10 +366,12 @@ def calculate_premium(policyId , contributionId = None):
                 paymentDetail = PaymentDetail.objects.filter(Q(premium=premiums)).first()
                 description['matching_payment_id'] = paymentDetail.payment.id if paymentDetail else None
     unpaidYears = 0
-    previousPolicies = Policy.filter_queryset(None).filter(family= policy.family.id , status__in=[Policy.STATUS_READY, Policy.STATUS_EXPIRED, Policy.STATUS_ACTIVE]).first()
+    previousPolicies = Policy.filter_queryset(None).filter(family= policy.family.id , status__in=[Policy.STATUS_READY, Policy.STATUS_EXPIRED, Policy.STATUS_ACTIVE]).order_by('-expiry_date').first()
     if previousPolicies:
         days = dt.today() - previousPolicies.expiry_date
         unpaidYears = math.floor(days.days / 365)
+        if unpaidYears < 0:
+            unpaidYears = 0
     panishment = calculate_expression(penalityFormula,unpaidYears, finalAmount) if penalityFormula else 0.0
     finalAmount = finalAmount + panishment
     description['total_amount'] = finalAmount
@@ -379,4 +380,5 @@ def calculate_premium(policyId , contributionId = None):
     description['additional_wifes'] = additionalWifes
     description['unpayed_years'] = unpaidYears
     description['penality_formula'] = penalityFormula
+    description["family_size"] = familyLength
     return finalAmount , description
