@@ -26,7 +26,7 @@ def checkout_notify(request):
             "matched_date": date.today().strftime("%Y-%m-%d"),
             "expected_amount": str(body["totalAmount"]),
             "received_amount": str(body["totalAmount"]),
-            "status": 1,
+            "status": 5,
             "receipt_no": body["transaction"]["transactionId"],
             "origin": body['paymentMethod'],
         }
