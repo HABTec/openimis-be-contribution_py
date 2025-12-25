@@ -6,7 +6,7 @@ from django.db.models import Sum, Q
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 from django.db.transaction import atomic
-from insuree.models import Insuree, Family, InsureePolicy
+from insuree.models import Insuree, Family, InsureePolicy, InsureeStatus
 from location.apps import LocationConfig
 from location.models import Location
 from policy.models import Policy
@@ -345,7 +345,8 @@ def calculate_premium(policyId , contributionId = None):
         if (
             age < max_age
             or member.disability_status != 'no_disability'
-            or not member.is_active
+            or member.status == InsureeStatus.ACTIVE
+            or member.status == InsureeStatus.DEAD
             or member.is_head_of_family()
             or member.relationship_id == 8
         ):
