@@ -135,7 +135,6 @@ class CreatePremiumMutation(OpenIMISMutation):
     def mutate_and_get_payload(cls, root, info, **data):
             policyId = data["policy_uuid"]
             policy = Policy.filter_queryset(None).filter(uuid=policyId).first()
-            premium = Premium.objects.select_related("policy__product").filter( policy=policy).first()
             premiumUUID = str(uuid.uuid4())
             data["uuid"] = premiumUUID
             phoneAddress = data["phone_number"] if data['pay_type'] == 'O' else None
@@ -147,18 +146,20 @@ class CreatePremiumMutation(OpenIMISMutation):
             response = super().mutate_and_get_payload(root, info, **data)
             response.contribution_id = premiumUUID
             if data['pay_type'] == 'O' and finalAmount != 0:
-                if(premium is not None):
+                if(policy is not None):
                     session = getCheckoutSession( 
                         f"Benefit package for a family of {desc['family_size']} members",
-                        premium.policy.product.code,
+                        policy.product.code,
                         premiumUUID, 
                         finalAmount,
                         phoneAddress)['data']
             
                     
                     response.payment_link = session['paymentUrl']
-                    premium.receipt = session['sessionId'] if (session['sessionId'])  else premium.receipt
-                    premium.save()
+                    premium = Premium.objects.select_related("policy__product").filter(uuid=premiumUUID).first()
+                    if premium and session['sessionId'] :
+                        premium.receipt = session['sessionId'] 
+                        premium.save()
             if data['pay_type'] == 'P' or data['pay_type'] == 'F':
                 payload = {
                     "client_mutation_label": "Create payment",
